@@ -14,6 +14,7 @@ API_CATALOG_MODELS: Dict[str, int] = {
     "meta/codellama-70b": 1024,
     "meta/llama3-70b-instruct": 8192,
     "meta/llama3-8b-instruct": 8192,
+    "meta/llama-3.3-70b-instruct": 128000,
     "microsoft/phi-3-medium-4k-instruct": 1024,
     "microsoft/phi-3-mini-128k-instruct": 2048,
     "microsoft/phi-3-mini-4k-instruct": 2048,
@@ -31,6 +32,33 @@ API_CATALOG_MODELS: Dict[str, int] = {
     "seallms/seallm-7b-v2.5": 4096,
     "upstage/solar-10.7b-instruct": 4096,
 }
+
+NVIDIA_FUNTION_CALLING_MODELS = (
+    "nv-mistralai/mistral-nemo-12b-instruct",
+    "meta/llama-3.1-8b-instruct",
+    "meta/llama-3.1-70b-instruct",
+    "meta/llama-3.1-405b-instruct",
+    "meta/llama-3.3-70b-instruct",
+    "mistralai/mistral-large-2-instruct",
+)
+
+COMPLETION_MODELS = (
+    "bigcode/starcoder2-7b",
+    "bigcode/starcoder2-15b",
+    "nvidia/mistral-nemo-minitron-8b-base",
+)
+
+ALL_MODELS = (
+    tuple(API_CATALOG_MODELS.keys()) + NVIDIA_FUNTION_CALLING_MODELS + COMPLETION_MODELS
+)
+
+
+def is_chat_model(modelname: str):
+    return modelname not in COMPLETION_MODELS
+
+
+def is_nvidia_function_calling_model(modelname: str) -> bool:
+    return modelname in NVIDIA_FUNTION_CALLING_MODELS
 
 
 def catalog_modelname_to_contextsize(modelname: str) -> Optional[int]:
