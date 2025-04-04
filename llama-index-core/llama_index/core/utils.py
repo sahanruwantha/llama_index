@@ -1,15 +1,19 @@
 """General utils functions."""
 
 import asyncio
+import base64
 import os
 import random
+import requests
 import sys
 import time
 import traceback
 import uuid
+from binascii import Error as BinasciiError
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
+from io import BytesIO
 from itertools import islice
 from pathlib import Path
 from typing import (
@@ -26,24 +30,25 @@ from typing import (
     Type,
     Union,
     runtime_checkable,
+    TYPE_CHECKING,
 )
+
+if TYPE_CHECKING:
+    from nltk.tokenize import PunktSentenceTokenizer
 
 
 class GlobalsHelper:
-    """Helper to retrieve globals.
-
-    Helpful for global caching of certain variables that can be expensive to load.
-    (e.g. tokenization)
-
-    """
+    """Helper to retrieve globals with asynchronous NLTK data loading."""
 
     _stopwords: Optional[List[str]] = None
+    _punkt_tokenizer: Optional["PunktSentenceTokenizer"] = None
     _nltk_data_dir: Optional[str] = None
 
-    def __init__(self) -> None:
-        """Initialize NLTK stopwords and punkt."""
-        import nltk
+    def wait_for_nltk_check(self) -> None:
+        """Initialize NLTK data download."""
+        from nltk.data import path as nltk_path
 
+        # Set up NLTK data directory
         self._nltk_data_dir = os.environ.get(
             "NLTK_DATA",
             os.path.join(
@@ -52,38 +57,66 @@ class GlobalsHelper:
             ),
         )
 
-        if self._nltk_data_dir not in nltk.data.path:
-            nltk.data.path.append(self._nltk_data_dir)
+        # Ensure the directory exists
+        os.makedirs(self._nltk_data_dir, exist_ok=True)
 
-        # ensure access to data is there
-        try:
-            nltk.data.find("corpora/stopwords")
-        except LookupError:
-            nltk.download("stopwords", download_dir=self._nltk_data_dir)
+        # Add to NLTK path if not already present
+        if self._nltk_data_dir not in nltk_path:
+            nltk_path.append(self._nltk_data_dir)
+
+        # Start downloading NLTK data / confirming it's available
+        self._download_nltk_data()
+
+    def _download_nltk_data(self) -> None:
+        """Download NLTK data packages in the background."""
+        from nltk.data import find as nltk_find
+        from nltk import download
 
         try:
-            nltk.data.find("tokenizers/punkt_tab")
-        except LookupError:
-            nltk.download("punkt_tab", download_dir=self._nltk_data_dir)
+            # Download stopwords
+            try:
+                nltk_find("corpora/stopwords", paths=[self._nltk_data_dir])
+            except LookupError:
+                download("stopwords", download_dir=self._nltk_data_dir, quiet=True)
+
+            # Download punkt tokenizer
+            try:
+                nltk_find("tokenizers/punkt_tab", paths=[self._nltk_data_dir])
+            except LookupError:
+                download("punkt_tab", download_dir=self._nltk_data_dir, quiet=True)
+
+        except Exception as e:
+            print(f"NLTK download error: {e}")
 
     @property
     def stopwords(self) -> List[str]:
-        """Get stopwords."""
+        """Get stopwords, ensuring data is downloaded."""
         if self._stopwords is None:
-            try:
-                import nltk
-                from nltk.corpus import stopwords
-            except ImportError:
-                raise ImportError(
-                    "`nltk` package not found, please run `pip install nltk`"
-                )
+            # Wait for stopwords to be available
+            self.wait_for_nltk_check()
 
-            try:
-                nltk.data.find("corpora/stopwords", paths=[self._nltk_data_dir])
-            except LookupError:
-                nltk.download("stopwords", download_dir=self._nltk_data_dir)
+            from nltk.corpus import stopwords
+            from nltk.tokenize import PunktSentenceTokenizer
+
             self._stopwords = stopwords.words("english")
+            self._punkt_tokenizer = PunktSentenceTokenizer()
+
         return self._stopwords
+
+    @property
+    def punkt_tokenizer(self) -> "PunktSentenceTokenizer":
+        """Get punkt tokenizer, ensuring data is downloaded."""
+        if self._punkt_tokenizer is None:
+            # Wait for punkt to be available
+            self.wait_for_nltk_check()
+
+            from nltk.corpus import stopwords
+            from nltk.tokenize import PunktSentenceTokenizer
+
+            self._punkt_tokenizer = PunktSentenceTokenizer()
+            self._stopwords = stopwords.words("english")
+
+        return self._punkt_tokenizer
 
 
 globals_helper = GlobalsHelper()
@@ -570,3 +603,63 @@ async def async_unit_generator(x: Any) -> AsyncGenerator[Any, None]:
         Any: the single element
     """
     yield x
+
+
+def resolve_binary(
+    raw_bytes: Optional[bytes] = None,
+    path: Optional[Union[str, Path]] = None,
+    url: Optional[str] = None,
+    as_base64: bool = False,
+) -> BytesIO:
+    """Resolve binary data from various sources into a BytesIO object.
+
+    Args:
+        raw_bytes: Raw bytes data
+        path: File path to read bytes from
+        url: URL to fetch bytes from
+        as_base64: Whether to base64 encode the output bytes
+
+    Returns:
+        BytesIO object containing the binary data
+
+    Raises:
+        ValueError: If no valid source is provided
+    """
+    if raw_bytes is not None:
+        # check if raw_bytes is base64 encoded
+        try:
+            decoded_bytes = base64.b64decode(raw_bytes)
+        except Exception:
+            decoded_bytes = raw_bytes
+
+        try:
+            # Check if raw_bytes is already base64 encoded.
+            # b64decode() can succeed on random binary data, so we
+            # pass verify=True to make sure it's not a false positive
+            decoded_bytes = base64.b64decode(raw_bytes, validate=True)
+        except BinasciiError:
+            # b64decode failed, leave as is
+            decoded_bytes = raw_bytes
+
+        if as_base64:
+            return BytesIO(base64.b64encode(decoded_bytes))
+        return BytesIO(decoded_bytes)
+
+    elif path is not None:
+        path = Path(path) if isinstance(path, str) else path
+        data = path.read_bytes()
+        if as_base64:
+            return BytesIO(base64.b64encode(data))
+        return BytesIO(data)
+
+    elif url is not None:
+        headers = {
+            "User-Agent": "LlamaIndex/0.0 (https://llamaindex.ai; info@llamaindex.ai) llama-index-core/0.0"
+        }
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        if as_base64:
+            return BytesIO(base64.b64encode(response.content))
+        return BytesIO(response.content)
+
+    raise ValueError("No valid source provided to resolve binary data!")

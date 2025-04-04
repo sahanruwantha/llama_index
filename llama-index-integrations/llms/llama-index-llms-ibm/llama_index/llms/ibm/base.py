@@ -290,28 +290,27 @@ class WatsonxLLM(FunctionCallingLLM):
 
     @property
     def metadata(self) -> LLMMetadata:
-        if self.model_id:
-            return LLMMetadata(
-                context_window=(
-                    self.model_info.get("model_limits", {}).get("max_sequence_length")
-                ),
-                num_output=(self.max_new_tokens or DEFAULT_MAX_TOKENS),
-                model_name=self.model_id,
+        if self.model_id and self._context_window is None:
+            model_id = self.model_id
+            self._context_window = self.model_info.get("model_limits", {}).get(
+                "max_sequence_length"
             )
-        else:
+        elif self._context_window is None:
             model_id = self.deployment_info.get("entity", {}).get("base_model_id")
-            context_window = (
+            self._context_window = (
                 self._model._client.foundation_models.get_model_specs(model_id=model_id)
                 .get("model_limits", {})
                 .get("max_sequence_length")
             )
-            return LLMMetadata(
-                context_window=context_window
-                or self._context_window
-                or DEFAULT_CONTEXT_WINDOW,
-                num_output=(self.max_new_tokens or DEFAULT_MAX_TOKENS),
-                model_name=model_id or self._model.deployment_id,
-            )
+
+        return LLMMetadata(
+            context_window=self._context_window or DEFAULT_CONTEXT_WINDOW,
+            num_output=self.max_new_tokens or DEFAULT_MAX_TOKENS,
+            model_name=self.model_id
+            or self.deployment_info.get("entity", {}).get(
+                "base_model_id", self._model.deployment_id
+            ),
+        )
 
     @property
     def sample_generation_text_params(self) -> Dict[str, Any]:
@@ -513,20 +512,24 @@ class WatsonxLLM(FunctionCallingLLM):
 
             for response in stream_response:
                 tools_available = False
-                wx_message = response["choices"][0]["delta"]
-
-                role = wx_message.get("role") or role or MessageRole.ASSISTANT
-                delta = wx_message.get("content", "")
-                content += delta
-
-                if "tool_calls" in wx_message:
-                    tools_available = True
-
+                delta = ""
                 additional_kwargs = {}
-                if tools_available:
-                    tool_calls = update_tool_calls(tool_calls, wx_message["tool_calls"])
-                    if tool_calls:
-                        additional_kwargs["tool_calls"] = tool_calls
+                if response["choices"]:
+                    wx_message = response["choices"][0]["delta"]
+
+                    role = wx_message.get("role") or role or MessageRole.ASSISTANT
+                    delta = wx_message.get("content", "")
+                    content += delta
+
+                    if "tool_calls" in wx_message:
+                        tools_available = True
+
+                    if tools_available:
+                        tool_calls = update_tool_calls(
+                            tool_calls, wx_message["tool_calls"]
+                        )
+                        if tool_calls:
+                            additional_kwargs["tool_calls"] = tool_calls
 
                 yield ChatResponse(
                     message=ChatMessage(
@@ -641,7 +644,7 @@ class WatsonxLLM(FunctionCallingLLM):
         """Get the token usage reported by the response."""
         if isinstance(raw_response, dict):
             usage = raw_response.get("usage", {})
-            if usage is None:
+            if not usage:
                 return {}
 
             prompt_tokens = usage.get("prompt_tokens", 0)

@@ -79,6 +79,37 @@ llama_index.core.set_global_handler(
 
 ![](../../_static/integrations/arize_phoenix.png)
 
+
+### MLflow
+
+[MLflow](https://mlflow.org/docs/latest/llms/tracing/index.html) is an open-source MLOps/LLMOps platform, focuses on the full lifecycle for machine learning projects, ensuring that each phase is manageable, traceable, and reproducible.
+**MLflow Tracing** is an OpenTelemetry-based tracing capability and supports one-click instrumentation for LlamaIndex applications.
+
+#### Usage Pattern
+
+Since MLflow is open-source, you can start using it without any account creation or API key setup. Jump straight into the code after installing the MLflow package!
+
+```python
+import mlflow
+
+mlflow.llama_index.autolog()  # Enable mlflow tracing
+```
+
+![](../../_static/integrations/mlflow/mlflow.gif)
+
+#### Guides
+
+MLflow LlamaIndex integration also provides experiment tracking, evaluation, dependency management, and more. Check out the [MLflow documentation](https://mlflow.org/docs/latest/llms/llama-index/index.html) for more details.
+
+#### Support Table
+
+MLflow Tracing support the full range of LlamaIndex features. Some new features like [AgentWorkflow](https://www.llamaindex.ai/blog/introducing-agentworkflow-a-powerful-system-for-building-ai-agent-systems) requires MLflow >= 2.18.0.
+
+| Streaming | Async | Engine | Agents | Workflow | AgentWorkflow |
+| --- | --- | --- | --- | --- | --- |
+| ✅ |  ✅ | ✅ | ✅ | ✅ (>= 2.18) | ✅  (>= 2.18) |
+
+
 ### OpenLLMetry
 
 [OpenLLMetry](https://github.com/traceloop/openllmetry) is an open-source project based on OpenTelemetry for tracing and monitoring
@@ -133,6 +164,61 @@ llama_index.core.set_global_handler("arize_phoenix")
 
 - [Auto-Retrieval Guide with Pinecone and Arize Phoenix](https://docs.llamaindex.ai/en/latest/examples/vector_stores/pinecone_auto_retriever/?h=phoenix)
 - [Arize Phoenix Tracing Tutorial](https://colab.research.google.com/github/Arize-ai/phoenix/blob/main/tutorials/tracing/llama_index_tracing_tutorial.ipynb)
+
+### Langfuse 🪢
+
+[Langfuse](https://langfuse.com/docs) is an open source LLM engineering platform to help teams collaboratively debug, analyze and iterate on their LLM Applications. With the Langfuse integration, you can track and monitor performance, traces, and metrics of your LlamaIndex application. Detailed [traces](https://langfuse.com/docs/tracing) of the context augmentation and the LLM querying processes are captured and can be inspected directly in the Langfuse UI.
+
+#### Usage Pattern
+
+Make sure you have both `llama-index` and `langfuse` installed.
+
+```bash
+pip install llama-index langfuse
+```
+
+At the root of your LlamaIndex application, register Langfuse's `LlamaIndexInstrumentor`. When instantiating `LlamaIndexInstrumentor`, make sure to configure your Langfuse API keys and the Host URL correctly via environment variables or constructor arguments.
+
+```python
+import os
+
+# Get keys for your project from the project settings page: https://cloud.langfuse.com
+os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+os.environ["LANGFUSE_HOST"] = "https://cloud.langfuse.com"  # 🇪🇺 EU region
+# os.environ["LANGFUSE_HOST"] = "https://us.cloud.langfuse.com" # 🇺🇸 US region
+```
+
+```python
+from langfuse.llama_index import LlamaIndexInstrumentor
+
+# Get your keys from the Langfuse project settings page and set them as environment variables
+# or pass them as arguments when initializing the instrumentor
+
+instrumentor = LlamaIndexInstrumentor()
+
+# Automatically trace all LlamaIndex operations
+instrumentor.start()
+
+# ... your LlamaIndex index creation ...
+index.as_query_engine().query("What is the capital of France?")
+
+# Flush events to langfuse
+instrumentor.flush()
+```
+
+You can now see the logs of your LlamaIndex application in Langfuse:
+
+[LlamaIndex example trace](https://langfuse.com/images/cookbook/integration-llamaindex-workflows/llamaindex-trace.gif)
+
+_[Example trace link in Langfuse](https://cloud.langfuse.com/project/cloramnkj0002jz088vzn1ja4/traces/6f554d6b-a2bc-4fba-904f-aa54de2897ca?display=preview)_
+
+#### Example Guides
+
+- [Langfuse Documentation](https://langfuse.com/docs/integrations/llama-index/get-started)
+- [End-to-end example notebook](https://langfuse.com/docs/integrations/llama-index/example-python-instrumentation-module)
+- [Tracing LlamaIndex Agents](https://langfuse.com/docs/integrations/llama-index/workflows)
+- [Analyze and Debug LlamaIndex Applications with PostHog and Langfuse](https://docs.llamaindex.ai/en/stable/examples/observability/LangfuseMistralPostHog/)
 
 ### Literal AI
 
@@ -263,7 +349,7 @@ These partner integrations use our legacy `CallbackManager` or third-party calls
 
 ### Langfuse
 
-[Langfuse](https://langfuse.com/docs) is an open source LLM engineering platform to help teams collaboratively debug, analyze and iterate on their LLM Applications. With the Langfuse integration, you can seamlessly track and monitor performance, traces, and metrics of your LlamaIndex application. Detailed [traces](https://langfuse.com/docs/tracing) of the LlamaIndex context augmentation and the LLM querying processes are captured and can be inspected directly in the Langfuse UI.
+This integration is deprecated. We recommend using the new instrumentation-based integration with Langfuse as described [here](https://langfuse.com/docs/integrations/llama-index/get-started).
 
 #### Usage Pattern
 
@@ -545,39 +631,6 @@ import llama_index.core
 
 llama_index.core.set_global_handler("simple")
 ```
-
-### MLflow
-
-[MLflow](https://mlflow.org/docs/latest/index.html) is an open-source platform, purpose-built to assist machine learning practitioners and teams in handling the complexities of the machine learning process. MLflow focuses on the full lifecycle for machine learning projects, ensuring that each phase is manageable, traceable, and reproducible.
-
-##### Install
-
-```shell
-pip install mlflow>=2.15 llama-index>=0.10.44
-```
-
-#### Usage Pattern
-
-```python
-import mlflow
-
-mlflow.llama_index.autolog()  # Enable mlflow tracing
-
-with mlflow.start_run() as run:
-    mlflow.llama_index.log_model(
-        index,
-        artifact_path="llama_index",
-        engine_type="query",  # Logged engine type for inference
-        input_example="hi",
-        registered_model_name="my_llama_index_vector_store",
-    )
-    model_uri = f"runs:/{run.info.run_id}/llama_index"
-
-predictions = mlflow.pyfunc.load_model(model_uri).predict("hi")
-print(f"Query engine prediction: {predictions}")
-```
-
-![](../../_static/integrations/mlflow.gif)
 
 #### Guides
 

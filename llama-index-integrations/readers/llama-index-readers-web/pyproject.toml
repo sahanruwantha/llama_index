@@ -12,10 +12,12 @@ contains_example = false
 import_path = "llama_index.readers.web"
 
 [tool.llamahub.class_authors]
+AgentQLWebReader = "jayfish0"
 AsyncWebPageReader = "Hironsan"
 BeautifulSoupWebReader = "thejessezhang"
 BrowserbaseWebReader = "llama-index"
 FireCrawlWebReader = "llama-index"
+HyperbrowserWebReader = "NikhilShahi"
 KnowledgeBaseWebReader = "jasonwcfan"
 MainContentExtractorReader = "HawkClaws"
 NewsArticleReader = "ruze00"
@@ -41,11 +43,11 @@ authors = ["Your Name <you@example.com>"]
 description = "llama-index readers web integration"
 exclude = ["**/BUILD"]
 keywords = ["BFS", "article", "atom", "documentation", "feed", "main content extractor", "news", "readthedocs", "rss", "scraper", "selenium", "seo", "sitemap", "substack", "trafilatura", "unstructured.io", "url", "web reader", "web", "website"]
-license = "MIT"
+license = "GPL-3.0-or-later"
 maintainers = ["HawkClaws", "Hironsan", "NA", "an-bluecat", "bborn", "jasonwcfan", "kravetsmic", "pandazki", "ruze00", "selamanse", "thejessezhang"]
 name = "llama-index-readers-web"
 readme = "README.md"
-version = "0.3.1"
+version = "0.3.9"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
@@ -60,6 +62,7 @@ playwright = ">=1.30,<2.0"
 newspaper3k = "^0.2.8"
 spider-client = "^0.0.27"
 llama-index-core = "^0.12.0"
+defusedxml = "^0.7.1"
 
 [tool.poetry.group.dev.dependencies]
 ipython = "8.10.0"
